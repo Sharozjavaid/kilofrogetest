@@ -39,7 +39,14 @@ export async function POST(request: Request) {
 
   const text = response.output_text ?? "";
   let parsed: {
-    events?: Array<{ datetime_iso?: string; lat?: number; lng?: number }>;
+    events?: Array<{
+      datetime_iso?: string;
+      lat?: number;
+      lng?: number;
+      url?: string;
+      title?: string;
+      venue?: string;
+    }>;
   } | null = null;
   try {
     const match = text.match(/\{[\s\S]*\}/);
@@ -74,6 +81,26 @@ export async function POST(request: Request) {
     droppedPast = before - parsed.events.length;
   }
 
+  // Validate every URL — replace broken/missing ones with a Google search
+  // fallback so the user never lands on a dead page.
+  if (parsed?.events?.length) {
+    await Promise.all(
+      parsed.events.map(async (ev) => {
+        const fallback = buildSearchFallback(ev.title, ev.venue);
+        if (!ev.url || !/^https?:\/\//i.test(ev.url)) {
+          ev.url = fallback;
+          return;
+        }
+        try {
+          const ok = await urlResolves(ev.url);
+          if (!ok) ev.url = fallback;
+        } catch {
+          ev.url = fallback;
+        }
+      })
+    );
+  }
+
   return Response.json({
     events: parsed,
     raw: parsed ? undefined : text,
@@ -81,4 +108,31 @@ export async function POST(request: Request) {
     droppedPast,
     now: nowIso,
   });
+}
+
+function buildSearchFallback(title?: string, venue?: string): string {
+  const q = [title, venue, "San Francisco"].filter(Boolean).join(" ");
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}
+
+async function urlResolves(url: string): Promise<boolean> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 4000);
+  const headers = {
+    "user-agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+    accept: "text/html,application/xhtml+xml",
+  };
+  try {
+    // Try HEAD first (cheap), fall back to GET if HEAD is blocked.
+    let res = await fetch(url, { method: "HEAD", redirect: "follow", headers, signal: ctrl.signal });
+    if (res.status === 405 || res.status === 403 || res.status === 400) {
+      res = await fetch(url, { method: "GET", redirect: "follow", headers, signal: ctrl.signal });
+    }
+    return res.status >= 200 && res.status < 400;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(t);
+  }
 }

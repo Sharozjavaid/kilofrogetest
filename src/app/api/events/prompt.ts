@@ -123,7 +123,14 @@ Rules:
     degrees (WGS84). Coordinates must fall inside SF proper roughly within
     37.70–37.83 N and -122.52–-122.35 W. If you cannot confidently determine
     the venue's coordinates, drop the event.
-  - Every event MUST have a working source URL you actually saw in search results.
+  - Every event MUST have a working source URL that you opened (or saw as a
+    real result) during web_search. Use the canonical event-detail page from
+    a known aggregator (Eventbrite, Lu.ma, Funcheap, Dice, Resident Advisor,
+    venue calendar, etc.) — not a homepage, not a search results page, not a
+    paginated archive that changes daily, and never a guessed slug. If you
+    only have an aggregator listing page (e.g. "/events"), DO NOT invent a
+    detail-page slug — return the listing URL instead. If you cannot point
+    to a stable URL you actually saw, drop the event.
   - Do not invent events. If a date is unclear, drop the event. If a price
     is unclear, use "TBA".
   - Skip events outside the requested window or outside SF proper unless
